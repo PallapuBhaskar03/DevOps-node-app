@@ -1,0 +1,36 @@
+name: CI/CD Pipeline - Deploy to EC2
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+    - name: Build and push Docker image
+      run: |
+        docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/devops-node-app:latest .
+        docker push ${{ secrets.DOCKERHUB_USERNAME }}/devops-node-app:latest
+
+    - name: SSH into EC2 and deploy container
+      uses: appleboy/ssh-action@v0.1.8
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/devops-node-app:latest
+          docker stop devops-node-app || true
+          docker rm devops-node-app || true
+          docker run -d --name devops-node-app -p 3000:3000 --restart unless-stopped ${{ secrets.DOCKERHUB_USERNAME }}/devops-node-app:latest
